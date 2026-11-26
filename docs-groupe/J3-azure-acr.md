@@ -57,3 +57,13 @@ ACR Basic : environ 5 $/mois, prélevés sur le crédit Azure for Students. Supp
 - *Pourquoi ne pas utiliser `latest` seulement ?* → `latest` change à chaque push, impossible de savoir quelle version tourne ni de revenir en arrière.
 - *Pourquoi linux/amd64 ?* → architecture des serveurs Azure ; une image arm64 échouerait au démarrage (`exec format error`).
 - *Comment Docker s'authentifie sur l'ACR ?* → `az acr login` utilise la session `az login` pour obtenir un jeton temporaire ; aucun mot de passe stocké.
+
+## Incident : environnement créé en mode « Express »
+
+Premier lancement de `./scripts/deploy.sh apps` :
+```
+(ExpressAllowInsecureNotSupported) Allow Insecure is not supported for container app 'quiz-backend' on express environments.
+```
+**Diagnostic** : `az containerapp env show ... --query properties.environmentMode` → `Express`. Sans option, Azure CLI 2.93 crée un environnement **Express** (mode simplifié récent). D'après la documentation Microsoft, Express n'accepte que l'ingress HTTPS, ne fournit **pas de découverte de service interne** (appel `http://quiz-backend` impossible) et ne supporte **pas l'identité managée système**.
+
+**Correction** : création explicite en mode standard `--environment-mode WorkloadProfiles` (profil Consumption, facturation à l'usage). Le script refuse désormais de continuer sur un environnement Express et indique la commande de suppression.

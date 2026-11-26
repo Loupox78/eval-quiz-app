@@ -104,11 +104,20 @@ deploy_apps() {
   local server; server="$(acr_server)"
   az extension add -n containerapp --upgrade -y -o none 2>/dev/null || true
 
+  # Mode WorkloadProfiles (standard) imposé explicitement : sans cette option, Azure crée
+  # désormais un environnement "Express", qui interdit l'appel interne http://quiz-backend,
+  # le HTTP interne (allowInsecure) et l'identité managée système.
   if az containerapp env show -n "$ACA_ENV" -g "$RG" -o none 2>/dev/null; then
-    log "Environnement $ACA_ENV déjà présent"
+    local mode
+    mode="$(az containerapp env show -n "$ACA_ENV" -g "$RG" --query properties.environmentMode -o tsv)"
+    [[ "$mode" != "Express" ]] || die "l'environnement $ACA_ENV est en mode Express. Supprimez-le :
+  az containerapp env delete -n $ACA_ENV -g $RG --yes
+puis relancez ./scripts/deploy.sh apps"
+    log "Environnement $ACA_ENV déjà présent (mode ${mode:-standard})"
   else
-    log "Création de l'environnement Container Apps $ACA_ENV (plusieurs minutes)"
-    az containerapp env create -n "$ACA_ENV" -g "$RG" -l "$LOCATION" -o none
+    log "Création de l'environnement Container Apps $ACA_ENV (mode WorkloadProfiles, plusieurs minutes)"
+    az containerapp env create -n "$ACA_ENV" -g "$RG" -l "$LOCATION" \
+      --environment-mode WorkloadProfiles --logs-destination log-analytics -o none
   fi
 
   # Secrets stockés dans la Container App, injectés en variables via secretref:
