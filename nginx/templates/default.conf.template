@@ -34,6 +34,13 @@ server {
         proxy_read_timeout 60s;
     }
 
+    # Version déployée (commit Git de l'image), injectée au build : ARG/ENV APP_VERSION
+    location = /version {
+        default_type application/json;
+        add_header Cache-Control "no-store";
+        return 200 '{"version":"${APP_VERSION}"}\n';
+    }
+
     # Health check endpoint
     location /health {
         proxy_pass http://${BACKEND_HOST};

@@ -98,7 +98,7 @@ push_images() {
     --push ./backend
 
   log "Build + push frontend : $server/$FRONTEND_IMAGE:$TAG ($PLATFORM)"
-  docker buildx build --platform "$PLATFORM" \
+  docker buildx build --platform "$PLATFORM" --build-arg APP_VERSION="$TAG" \
     -t "$server/$FRONTEND_IMAGE:$TAG" -t "$server/$FRONTEND_IMAGE:latest" \
     --push .
 
