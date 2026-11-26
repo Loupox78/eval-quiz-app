@@ -36,11 +36,20 @@ SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
 RG_ID="$(az group show -n "$RG" --query id -o tsv)"
 ACR_ID="$(az acr show -n "$ACR_NAME" --query id -o tsv)"
 
-echo "==> Fédération : jetons GitHub de repo:$GITHUB_REPO:ref:refs/heads/main"
-if ! az identity federated-credential show -n github-main --identity-name "$GH_IDENTITY" -g "$RG" -o none 2>/dev/null; then
-  az identity federated-credential create -n github-main --identity-name "$GH_IDENTITY" -g "$RG" \
+# GitHub émet désormais un "subject" OIDC contenant aussi les identifiants numériques
+# (immuables) du propriétaire et du dépôt :
+#   repo:<owner>@<owner_id>/<repo>@<repo_id>:ref:refs/heads/main
+# Ces identifiants empêchent qu'un dépôt recréé plus tard sous le même nom hérite de l'accès.
+# Valeurs pour Loupox78/eval-quiz-app (API GitHub : GET /repos/Loupox78/eval-quiz-app -> owner.id, id) :
+GITHUB_OWNER_ID="${GITHUB_OWNER_ID:-150783612}"
+GITHUB_REPO_ID="${GITHUB_REPO_ID:-1472881647}"
+OIDC_SUBJECT="repo:${GITHUB_REPO%%/*}@${GITHUB_OWNER_ID}/${GITHUB_REPO##*/}@${GITHUB_REPO_ID}:ref:refs/heads/main"
+
+echo "==> Fédération : jetons GitHub de $OIDC_SUBJECT"
+if ! az identity federated-credential show -n github-main-ids --identity-name "$GH_IDENTITY" -g "$RG" -o none 2>/dev/null; then
+  az identity federated-credential create -n github-main-ids --identity-name "$GH_IDENTITY" -g "$RG" \
     --issuer "https://token.actions.githubusercontent.com" \
-    --subject "repo:$GITHUB_REPO:ref:refs/heads/main" \
+    --subject "$OIDC_SUBJECT" \
     --audiences "api://AzureADTokenExchange" -o none
 fi
 
