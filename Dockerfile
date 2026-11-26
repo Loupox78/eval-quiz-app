@@ -12,7 +12,9 @@ FROM nginxinc/nginx-unprivileged:alpine-slim
 USER root
 RUN apk upgrade --no-cache
 USER nginx
-COPY --chown=nginx:nginx nginx/nginx.conf /etc/nginx/conf.d/default.conf
+# Modèle de configuration : l'adresse du backend est injectée au démarrage via BACKEND_HOST
+COPY --chown=nginx:nginx nginx/templates/default.conf.template /etc/nginx/templates/default.conf.template
+ENV BACKEND_HOST=backend:3007
 COPY --from=build --chown=nginx:nginx /app/dist /usr/share/nginx/html
 # Un utilisateur non-root ne peut pas écouter sur un port < 1024 : Nginx écoute sur 8080
 EXPOSE 8080
