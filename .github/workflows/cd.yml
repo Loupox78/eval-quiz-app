@@ -1,0 +1,84 @@
+# CD — exécutée après fusion (push) sur main.
+# Build → contrôle Trivy → publication dans l'ACR (tag = commit) → mise à jour des Container Apps.
+# Authentification Azure par OIDC : aucun mot de passe stocké dans GitHub.
+name: CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write        # nécessaire pour obtenir le jeton OIDC GitHub
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  TRIVY_IMAGE: aquasec/trivy:0.76.2
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Paramètres communs (scripts/config.sh)
+        run: |
+          source scripts/config.sh
+          {
+            echo "RG=$RG"
+            echo "ACR_NAME=$ACR_NAME"
+            echo "BACKEND_APP=$BACKEND_APP"
+            echo "FRONTEND_APP=$FRONTEND_APP"
+            echo "BACKEND_IMAGE=$BACKEND_IMAGE"
+            echo "FRONTEND_IMAGE=$FRONTEND_IMAGE"
+            echo "TAG=$(git rev-parse --short HEAD)"
+          } >> "$GITHUB_ENV"
+
+      - name: Connexion Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Connexion Docker à l'ACR
+        run: |
+          az acr login -n "$ACR_NAME"
+          echo "SERVER=$(az acr show -n "$ACR_NAME" --query loginServer -o tsv)" >> "$GITHUB_ENV"
+
+      - name: Build des images (linux/amd64)
+        run: |
+          docker build --pull -t "$SERVER/$BACKEND_IMAGE:$TAG" -t "$SERVER/$BACKEND_IMAGE:latest" ./backend
+          docker build --pull -t "$SERVER/$FRONTEND_IMAGE:$TAG" -t "$SERVER/$FRONTEND_IMAGE:latest" .
+
+      - name: Contrôle Trivy avant publication (échec si CRITICAL)
+        run: |
+          for img in "$SERVER/$BACKEND_IMAGE:$TAG" "$SERVER/$FRONTEND_IMAGE:$TAG"; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY_IMAGE" \
+              image --scanners vuln --severity CRITICAL --exit-code 1 --no-progress "$img"
+          done
+
+      - name: Publication dans l'ACR
+        run: |
+          docker push --all-tags "$SERVER/$BACKEND_IMAGE"
+          docker push --all-tags "$SERVER/$FRONTEND_IMAGE"
+
+      - name: Mise à jour des Container Apps
+        run: |
+          az extension add -n containerapp --upgrade -y -o none
+          az containerapp update -n "$BACKEND_APP" -g "$RG" --image "$SERVER/$BACKEND_IMAGE:$TAG" -o none
+          az containerapp update -n "$FRONTEND_APP" -g "$RG" --image "$SERVER/$FRONTEND_IMAGE:$TAG" -o none
+
+      - name: Vérification du déploiement
+        run: |
+          FQDN=$(az containerapp show -n "$FRONTEND_APP" -g "$RG" --query properties.configuration.ingress.fqdn -o tsv)
+          az containerapp list -g "$RG" --query "[].{App:name, Image:properties.template.containers[0].image, Etat:properties.runningStatus}" -o table
+          for _ in $(seq 1 20); do
+            if curl -fsS "https://$FQDN/health"; then echo; echo "Déployé : https://$FQDN"; exit 0; fi
+            sleep 6
+          done
+          echo "/health ne répond pas" >&2; exit 1
