@@ -1,0 +1,52 @@
+# Preuve J1 — 2026-11-26T09:48:17+01:00
+
+$ docker compose up -d
+ Container eval-quiz-app-db-1 Creating 
+ Container eval-quiz-app-db-1 Created 
+ Container eval-quiz-app-backend-1 Creating 
+ Container eval-quiz-app-backend-1 Created 
+ Container eval-quiz-app-frontend-1 Creating 
+ Container eval-quiz-app-frontend-1 Created 
+ Container eval-quiz-app-db-1 Starting 
+ Container eval-quiz-app-db-1 Started 
+ Container eval-quiz-app-db-1 Waiting 
+ Container eval-quiz-app-db-1 Healthy 
+ Container eval-quiz-app-backend-1 Starting 
+ Container eval-quiz-app-backend-1 Started 
+ Container eval-quiz-app-frontend-1 Starting 
+ Container eval-quiz-app-frontend-1 Started 
+
+$ docker compose ps
+SERVICE    IMAGE                 STATUS                    PORTS
+backend    quiz-backend:local    Up 13 seconds             3007/tcp
+db         postgres:16-alpine    Up 19 seconds (healthy)   5432/tcp
+frontend   quiz-frontend:local   Up 13 seconds             0.0.0.0:8087->80/tcp
+
+$ curl -s http://localhost:8087/health
+{"status":"ok"}
+
+$ curl (code HTTP) http://localhost:8087/ puis /gestion-quiz
+200
+200
+
+$ curl -s -X POST http://localhost:8087/api/users -d {"firstname":"Persist","email":"persist@test.fr"}
+{"id":1,"firstname":"Persist","email":"persist@test.fr"}
+
+$ docker compose down   # SANS -v : le volume pgdata est conservé
+(conteneurs et réseau supprimés)
+
+$ docker volume ls | grep pgdata
+eval-quiz-app_pgdata
+
+$ docker compose up -d
+(conteneurs recréés)
+
+$ docker compose exec db psql -U quiz_user -d quiz_db -c "SELECT id, firstname, email FROM users;"
+ id | firstname |      email      
+----+-----------+-----------------
+  1 | Persist   | persist@test.fr
+(1 row)
+
+$ docker images | grep quiz
+quiz-backend:local  218MB
+quiz-frontend:local  102MB
