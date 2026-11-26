@@ -1,0 +1,33 @@
+# Preuves J3 - 2026-11-26 13:43
+
+$ az group show -n rg-eval-quiz --query "{nom:name, region:location, etat:properties.provisioningState}" -o table
+Nom           Region              Etat
+------------  ------------------  ---------
+rg-eval-quiz  germanywestcentral  Succeeded
+
+$ az acr show -n acrevalquizmems --query "{nom:name, serveur:loginServer, sku:sku.name, region:location, admin:adminUserEnabled}" -o table
+Nom              Serveur                     Sku    Region              Admin
+---------------  --------------------------  -----  ------------------  -------
+acrevalquizmems  acrevalquizmems.azurecr.io  Basic  germanywestcentral  False
+
+$ az acr repository list -n acrevalquizmems -o table
+Result
+-------------
+quiz-backend
+quiz-frontend
+
+$ az acr manifest list-metadata -r acrevalquizmems -n quiz-backend -o table
+WARNING: Command group 'acr manifest' is in preview and under development. Reference and support levels: https://aka.ms/CLI_refstatus
+Tag      Digest                                                                   Cree
+-------  -----------------------------------------------------------------------  ----------------------------
+2353651  sha256:6cf9e8dff813b225394562cf7ea7341b3224e4853791ee59a4f98d809d84afef  2026-11-26T12:43:32.0770219Z
+         sha256:bffd9d31177f8e316faf6acabae283fdab6198761e3435d018eef7ac2a9afae9  2026-11-26T12:43:31.6548786Z
+         sha256:e22708f53946b562ca8579aead289f7964c93141a6ec3372e52c4f4a68e09749  2026-11-26T12:43:31.7390266Z
+
+$ az acr manifest list-metadata -r acrevalquizmems -n quiz-frontend -o table
+WARNING: Command group 'acr manifest' is in preview and under development. Reference and support levels: https://aka.ms/CLI_refstatus
+Tag      Digest                                                                   Cree
+-------  -----------------------------------------------------------------------  ----------------------------
+2353651  sha256:0e469626394ad2aad8ef2461166404b98024ad173e42ea3bec202d9a30a7bf83  2026-11-26T12:43:40.2840829Z
+         sha256:bfa4397c751157797ff6d2c4fad52c122622013e128c816ec2a820efe8d616bc  2026-11-26T12:43:39.8746312Z
+         sha256:d65bbe49c52becc16d5733eec8a9b1dd7134a18af40573a2e08e7b539b58f98a  2026-11-26T12:43:39.8689128Z
