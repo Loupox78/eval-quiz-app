@@ -1,0 +1,135 @@
+# J6-A — Intégration continue sur Pull Request
+#
+# Déclenché sur chaque Pull Request vers main (et à la demande).
+# 1. Construit les images backend et frontend
+# 2. Les scanne avec Trivy : au moins une vulnérabilité CRITICAL => le job échoue (exit code 1)
+# 3. Lance l'application complète avec Docker Compose et teste /health et l'inscription
+#
+# Aucun secret ni accès Azure ici : une PR ne déploie jamais rien (le déploiement se fait
+# après fusion dans main, workflow séparé). Les noms des jobs ("Build + Trivy (backend)", ...)
+# sont ceux à sélectionner dans "Require status checks to pass before merging".
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Droits minimum : lecture du code uniquement
+permissions:
+  contents: read
+
+# Une nouvelle poussée sur la même PR annule l'exécution précédente
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Version de Trivy figée (même version que pour les rapports J2) : pas de surprise d'une
+  # exécution à l'autre. Lancé via l'image officielle, sans action tierce.
+  TRIVY_VERSION: "0.76.2"
+
+jobs:
+  build-scan:
+    name: Build + Trivy (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # on veut le rapport des deux images, même si l'une échoue
+      matrix:
+        include:
+          - service: backend
+            context: ./backend
+          - service: frontend
+            context: .
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Construire l'image quiz-${{ matrix.service }}
+        run: |
+          docker build --pull \
+            -t "quiz-${{ matrix.service }}:${{ github.sha }}" \
+            "${{ matrix.context }}"
+
+      - name: Cache de la base de vulnérabilités Trivy
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: trivy-db-${{ runner.os }}-
+
+      - name: Rapport Trivy complet (informatif)
+        run: |
+          mkdir -p trivy-report
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$HOME/.cache/trivy:/root/.cache/trivy" \
+            -v "$PWD/trivy-report:/report" \
+            "aquasec/trivy:${TRIVY_VERSION}" image \
+              --scanners vuln \
+              --format table \
+              --output "/report/trivy-${{ matrix.service }}.txt" \
+              "quiz-${{ matrix.service }}:${{ github.sha }}"
+          cat "trivy-report/trivy-${{ matrix.service }}.txt"
+
+      - name: Publier le rapport Trivy
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-${{ matrix.service }}
+          path: trivy-report/
+          retention-days: 30
+
+      # Contrôle BLOQUANT : pas de continue-on-error. Une seule CRITICAL => exit code 1 => job rouge
+      - name: Contrôle bloquant — aucune vulnérabilité CRITICAL
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$HOME/.cache/trivy:/root/.cache/trivy" \
+            "aquasec/trivy:${TRIVY_VERSION}" image \
+              --scanners vuln \
+              --severity CRITICAL \
+              --exit-code 1 \
+              --skip-db-update \
+              "quiz-${{ matrix.service }}:${{ github.sha }}"
+
+  integration:
+    name: Test d'intégration (Docker Compose)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      # Valeurs fictives de .env.example : suffisantes pour démarrer la pile en CI
+      - name: Préparer le fichier .env
+        run: cp .env.example .env
+
+      - name: Valider docker-compose.yml
+        run: docker compose config --quiet
+
+      - name: Démarrer la pile (db + backend + frontend)
+        run: docker compose up -d --build --wait --wait-timeout 120
+
+      - name: Tester /health à travers Nginx
+        run: |
+          curl --fail --silent --show-error --retry 10 --retry-delay 3 --retry-all-errors \
+            http://localhost:8087/health | tee health.json
+          grep -q '"status":"ok"' health.json
+
+      - name: Tester l'inscription (écriture PostgreSQL)
+        run: |
+          code=$(curl --silent --output user.json --write-out '%{http_code}' \
+            -X POST http://localhost:8087/api/users \
+            -H 'Content-Type: application/json' \
+            -d '{"firstname":"CI","email":"ci@example.com"}')
+          cat user.json; echo
+          test "$code" = "201"
+
+      - name: Logs des conteneurs en cas d'échec
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Arrêter la pile
+        if: always()
+        run: docker compose down -v
