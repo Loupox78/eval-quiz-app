@@ -50,14 +50,14 @@ flowchart LR
     BUILD["Build des 2 images"] --> TRIVY{"Trivy :<br/>CRITICAL ?"}
     TRIVY -- "oui" --> KO["Job rouge<br/>fusion bloquée"]
     TRIVY -- "non" --> OK["Job vert"]
-    IT["Test d'intégration<br/>Compose + /health + inscription"]
+    IT["Test de démarrage<br/>Compose + /health"]
   end
   PR --> BUILD
   PR --> IT
   OK --> REV["Revue + approbation"]
   IT --> REV
   REV --> MERGE["Fusion dans main"]
-  subgraph CD["CD — deploy.yml (après fusion)"]
+  subgraph CD["CD — cd.yml (après fusion)"]
     LOGIN["Connexion Azure<br/>OIDC, sans secret"] --> PUSH["Build + Trivy + push<br/>ACR tag = commit"]
     PUSH --> UPD["az containerapp update<br/>backend + frontend"]
     UPD --> CHECK["Nouvelle révision<br/>test /health"]

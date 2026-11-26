@@ -14,7 +14,7 @@ La consigne d'origine du formateur est conservée plus bas, à partir de [« Con
 | J3 — Azure CLI + ACR | [J3](docs-groupe/J3-azure-acr.md) | [preuves/J3](preuves/J3/) | #4 |
 | J4 — Azure Container Apps | [J4](docs-groupe/J4-container-apps.md) | [preuves/J4](preuves/J4/) | #4 |
 | J5 — PostgreSQL cloud (Neon) | [J5](docs-groupe/J5-postgresql-neon.md) | [preuves/J5](preuves/J5/) | #7 |
-| J6 — CI/CD GitHub Actions | [J6](docs-groupe/J6-cicd.md) | [preuves/J6](preuves/J6/) | #8 et suivantes |
+| J6 — CI/CD GitHub Actions | [J6](docs-groupe/J6-cicd.md) | [preuves/J6](preuves/J6/) | #9, démo d'échec #10 |
 
 Schémas d'architecture (local, Azure, chaîne de livraison) : [docs-groupe/architecture.md](docs-groupe/architecture.md).
 
@@ -48,7 +48,7 @@ Prérequis : Azure CLI connecté (`az login`, MFA demandée par le tenant de l'�
 
 Les paramètres non secrets (région, noms des ressources) sont dans [`scripts/config.sh`](scripts/config.sh). Les régions autorisées dépendent de l'abonnement étudiant (voir J0 et J3).
 
-Après fusion dans `main`, le workflow GitHub Actions `deploy.yml` fait la même mise à jour automatiquement (voir [J6](docs-groupe/J6-cicd.md)).
+Après fusion dans `main`, le workflow GitHub Actions `cd.yml` fait la même mise à jour automatiquement (voir [J6](docs-groupe/J6-cicd.md)).
 
 ## Nettoyer
 
