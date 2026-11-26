@@ -8,7 +8,7 @@ az account show --query "{nom:name, etat:state}" -o table   # Azure for Students
 az policy assignment list --query "[].parameters.listOfAllowedLocations.value" -o tsv
 ```
 Régions autorisées par l'abonnement : `switzerlandnorth`, `germanywestcentral`, `spaincentral`, `austriaeast`, `denmarkeast`.
-**Choix : `germanywestcentral`** (Francfort) — la plus proche de Paris, ACR et Container Apps disponibles.
+Premier choix : `germanywestcentral` (Francfort, la plus proche). La création d'environnement Container Apps y étant refusée pour ce compte (voir incidents ci-dessous), **toutes les ressources sont finalement en `switzerlandnorth` (Zurich)** : ACR, identité et Container Apps dans la même région (pas de transfert d'images inter-régions).
 
 ## Ressources créées
 
@@ -86,3 +86,7 @@ Field 'template.containers.quiz-backend.image' is invalid ... UNAUTHORIZED: auth
 **Corrections** :
 - identité **user-assigned** `id-quiz-acrpull` créée à l'étape `infra`, avec rôle `AcrPull` sur l'ACR, *avant* les apps → plus de dépendance à la création d'identité pendant `containerapp create` ; les apps existantes sont reconfigurées (`containerapp identity assign` + `containerapp registry set`) ;
 - vérification que `image:TAG` existe dans l'ACR avant le déploiement, avec message explicite.
+
+## Décision finale : tout en Suisse
+
+Pour garder toutes les ressources dans une seule région, l'ACR et l'identité créés à Francfort ont été supprimés puis recréés en `switzerlandnorth` (`LOCATION` dans `scripts/config.sh`). Le groupe de ressources `rg-quiz-app` reste déclaré en `germanywestcentral` : la région d'un groupe ne concerne que ses métadonnées et ne peut pas être changée ; elle n'impose rien aux ressources qu'il contient.

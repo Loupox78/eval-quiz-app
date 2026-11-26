@@ -40,8 +40,14 @@ deploy_infra() {
     az provider register -n "$ns" -o none
   done
 
-  log "Groupe de ressources $RG"
-  az group create -n "$RG" -l "$LOCATION" -o none
+  # La région d'un groupe existant ne peut pas être modifiée : on ne le crée que s'il manque
+  # (la région d'un groupe ne stocke que ses métadonnées, pas celles des ressources qu'il contient)
+  if az group show -n "$RG" -o none 2>/dev/null; then
+    log "Groupe de ressources $RG déjà présent"
+  else
+    log "Création du groupe de ressources $RG"
+    az group create -n "$RG" -l "$LOCATION" -o none
+  fi
 
   if az acr show -n "$ACR_NAME" -o none 2>/dev/null; then
     log "ACR $ACR_NAME déjà présent"

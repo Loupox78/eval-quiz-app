@@ -6,14 +6,15 @@
 # Groupe de ressources : "dossier" qui contient toutes les ressources du projet
 RG="${RG:-rg-quiz-app}"
 
-# Région : doit faire partie des régions autorisées par l'abonnement Azure for Students
+# Région de toutes les ressources : doit faire partie des régions autorisées par
+# l'abonnement Azure for Students :
 #   az policy assignment list --query "[].parameters.listOfAllowedLocations.value" -o tsv
-LOCATION="${LOCATION:-germanywestcentral}"
+# (germanywestcentral refuse la création d'environnement Container Apps sur ce compte :
+#  MaxNumberOfEnvironmentsInSubExceeded)
+LOCATION="${LOCATION:-switzerlandnorth}"
 
-# Région des Container Apps (peut différer de celle de l'ACR).
-# germanywestcentral refuse la création d'environnement sur cet abonnement étudiant
-# (MaxNumberOfEnvironmentsInSubExceeded) -> autre région autorisée.
-ACA_LOCATION="${ACA_LOCATION:-switzerlandnorth}"
+# Région des Container Apps : identique par défaut, surchargeable si besoin
+ACA_LOCATION="${ACA_LOCATION:-$LOCATION}"
 
 # Nom de l'ACR : unique au monde, 5 à 50 caractères, lettres minuscules et chiffres uniquement
 ACR_NAME="${ACR_NAME:-acrquizloupox78}"
