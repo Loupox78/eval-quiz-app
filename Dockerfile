@@ -1,13 +1,18 @@
 # Étape 1 : build du frontend avec Vite
-FROM node:20-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
 
-# Étape 2 : Nginx sert les fichiers statiques et fait proxy vers le backend
-FROM nginx:alpine
-COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
-EXPOSE 80
+# Étape 2 : Nginx non-root, variante "slim" (sans modules xslt / image-filter / njs ni curl)
+FROM nginxinc/nginx-unprivileged:alpine-slim
+# apk upgrade doit être lancé en root, puis on revient à l'utilisateur non privilégié "nginx"
+USER root
+RUN apk upgrade --no-cache
+USER nginx
+COPY --chown=nginx:nginx nginx/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build --chown=nginx:nginx /app/dist /usr/share/nginx/html
+# Un utilisateur non-root ne peut pas écouter sur un port < 1024 : Nginx écoute sur 8080
+EXPOSE 8080
