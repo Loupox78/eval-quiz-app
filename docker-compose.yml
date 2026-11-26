@@ -35,6 +35,8 @@ services:
     image: quiz-frontend:local
     ports:
       - "8087:8080"
+    environment:
+      BACKEND_HOST: backend:3007
     depends_on:
       - backend
     restart: unless-stopped

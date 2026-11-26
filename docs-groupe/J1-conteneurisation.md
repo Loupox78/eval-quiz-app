@@ -12,7 +12,7 @@
 
 - **Questionnaires** : codés en dur dans les fichiers `questions_*.js` à la racine (embarqués dans le build Vite).
 - **Résultats** : envoyés par `POST /api/results` puis stockés dans PostgreSQL.
-- **Le frontend appelle l'API en relatif** (`/api` dans `main.js` et `public/admin.js`) → il faut un reverse proxy sur la même origine : c'est le rôle de Nginx (`nginx/nginx.conf`, upstream `backend:3007`).
+- **Le frontend appelle l'API en relatif** (`/api` dans `main.js` et `public/admin.js`) → il faut un reverse proxy sur la même origine : c'est le rôle de Nginx (`nginx/templates/default.conf.template (modèle, BACKEND_HOST)`, upstream `backend:3007`).
 - **Routes de test** : `GET /health` (ne touche pas la base), `POST /api/users` (écrit en base).
 
 ### Variables : publiques vs secrets
