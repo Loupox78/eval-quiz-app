@@ -10,6 +10,11 @@ RG="${RG:-rg-quiz-app}"
 #   az policy assignment list --query "[].parameters.listOfAllowedLocations.value" -o tsv
 LOCATION="${LOCATION:-germanywestcentral}"
 
+# Région des Container Apps (peut différer de celle de l'ACR).
+# germanywestcentral refuse la création d'environnement sur cet abonnement étudiant
+# (MaxNumberOfEnvironmentsInSubExceeded) -> autre région autorisée.
+ACA_LOCATION="${ACA_LOCATION:-switzerlandnorth}"
+
 # Nom de l'ACR : unique au monde, 5 à 50 caractères, lettres minuscules et chiffres uniquement
 ACR_NAME="${ACR_NAME:-acrquizloupox78}"
 

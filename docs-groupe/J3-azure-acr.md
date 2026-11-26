@@ -67,3 +67,12 @@ Premier lancement de `./scripts/deploy.sh apps` :
 **Diagnostic** : `az containerapp env show ... --query properties.environmentMode` → `Express`. Sans option, Azure CLI 2.93 crée un environnement **Express** (mode simplifié récent). D'après la documentation Microsoft, Express n'accepte que l'ingress HTTPS, ne fournit **pas de découverte de service interne** (appel `http://quiz-backend` impossible) et ne supporte **pas l'identité managée système**.
 
 **Correction** : création explicite en mode standard `--environment-mode WorkloadProfiles` (profil Consumption, facturation à l'usage). Le script refuse désormais de continuer sur un environnement Express et indique la commande de suppression.
+
+## Incident : quota d'environnements dans la région
+
+Après suppression de l'environnement Express, recréation refusée :
+```
+(MaxNumberOfEnvironmentsInSubExceeded) The subscription '…' cannot create Container App Environments in region 'Germany West Central'. Please try another region.
+```
+**Diagnostic** : `az containerapp env list -o table` → aucun environnement existant ; la limite vient de l'abonnement Azure for Students pour cette région.
+**Correction** : nouvelle variable `ACA_LOCATION` dans `scripts/config.sh` (défaut `switzerlandnorth`, région autorisée). L'ACR reste en `germanywestcentral` : un environnement peut tirer des images d'un registre situé dans une autre région (léger surcoût de transfert, négligeable ici).

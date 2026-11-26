@@ -26,7 +26,7 @@ die() { printf '\033[1;31mErreur : %s\033[0m\n' "$*" >&2; exit 1; }
 check_prereqs() {
   command -v az >/dev/null || die "Azure CLI (az) introuvable"
   az account show -o none 2>/dev/null || die "non connecté : lancez 'az login'"
-  log "Abonnement : $(az account show --query name -o tsv) | Région : $LOCATION | Tag : $TAG"
+  log "Abonnement : $(az account show --query name -o tsv) | Région ACR : $LOCATION | Région apps : $ACA_LOCATION | Tag : $TAG"
 }
 
 acr_server() { az acr show -n "$ACR_NAME" --query loginServer -o tsv; }
@@ -115,8 +115,8 @@ deploy_apps() {
 puis relancez ./scripts/deploy.sh apps"
     log "Environnement $ACA_ENV déjà présent (mode ${mode:-standard})"
   else
-    log "Création de l'environnement Container Apps $ACA_ENV (mode WorkloadProfiles, plusieurs minutes)"
-    az containerapp env create -n "$ACA_ENV" -g "$RG" -l "$LOCATION" \
+    log "Création de l'environnement Container Apps $ACA_ENV dans $ACA_LOCATION (mode WorkloadProfiles, plusieurs minutes)"
+    az containerapp env create -n "$ACA_ENV" -g "$RG" -l "$ACA_LOCATION" \
       --environment-mode WorkloadProfiles --logs-destination log-analytics -o none
   fi
 
