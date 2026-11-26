@@ -1,0 +1,101 @@
+# BONUS — même CI que .github/workflows/ci.yml, version GitLab CI/CD.
+#
+# La chaîne officielle du projet reste GitHub Actions (CI + déploiement Azure).
+# Ce fichier sert sur un miroir GitLab du dépôt, pour comparer les deux outils.
+# Il ne déploie rien et n'a besoin d'aucun secret.
+#
+# Se déclenche :
+#   - sur chaque Merge Request
+#   - sur la branche par défaut (main)
+#
+# Étapes :
+#   build  : construit les 2 images et les sauvegarde en fichier .tar (artefact)
+#   scan   : Trivy sur chaque .tar ; au moins une CRITICAL => job en échec
+#   test   : démarre la pile Docker Compose et teste /health à travers Nginx
+
+stages:
+  - build
+  - scan
+  - test
+
+variables:
+  DOCKER_VERSION: "27.5.1"
+  TRIVY_VERSION: "0.76.2" # même version que les scans J2 et la CI GitHub
+  # Docker-in-Docker avec TLS (configuration recommandée par GitLab)
+  DOCKER_TLS_CERTDIR: "/certs"
+
+# Pipelines uniquement pour les MR et pour main (pas de pipeline en double sur une branche avec MR)
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+.docker:
+  image: docker:${DOCKER_VERSION}
+  services:
+    - name: docker:${DOCKER_VERSION}-dind
+      alias: docker
+
+build:
+  extends: .docker
+  stage: build
+  parallel:
+    matrix:
+      - SERVICE: backend
+        CONTEXT: ./backend
+      - SERVICE: frontend
+        CONTEXT: .
+  script:
+    - docker build --pull -t "quiz-${SERVICE}:${CI_COMMIT_SHORT_SHA}" "${CONTEXT}"
+    - docker save "quiz-${SERVICE}:${CI_COMMIT_SHORT_SHA}" -o "quiz-${SERVICE}.tar"
+  artifacts:
+    paths:
+      - quiz-${SERVICE}.tar
+    expire_in: 1 day
+
+trivy:
+  stage: scan
+  image:
+    name: aquasec/trivy:${TRIVY_VERSION}
+    entrypoint: [""]
+  needs: ["build"]
+  parallel:
+    matrix:
+      - SERVICE: [backend, frontend]
+  variables:
+    TRIVY_CACHE_DIR: .trivycache/
+  cache:
+    key: trivy-db
+    paths:
+      - .trivycache/
+  script:
+    # Rapport complet (informatif), gardé en artefact
+    - trivy image --scanners vuln --format table --output "trivy-${SERVICE}.txt" --input "quiz-${SERVICE}.tar"
+    - cat "trivy-${SERVICE}.txt"
+    # Contrôle BLOQUANT : pas de allow_failure, une CRITICAL => code de sortie 1 => job rouge
+    - trivy image --scanners vuln --severity CRITICAL --exit-code 1 --skip-db-update --input "quiz-${SERVICE}.tar"
+  artifacts:
+    when: always
+    paths:
+      - trivy-${SERVICE}.txt
+    expire_in: 30 days
+
+compose-test:
+  extends: .docker
+  stage: test
+  needs: [] # n'attend pas les autres jobs, comme sur GitHub
+  script:
+    - apk add --no-cache curl
+    - cp .env.example .env # valeurs fictives, suffisantes pour démarrer
+    - docker compose config --quiet
+    - docker compose up -d --build
+    # Avec Docker-in-Docker, les ports publiés sont sur l'hôte "docker", pas sur localhost
+    - |
+      for i in $(seq 1 30); do
+        if curl -fsS http://docker:8087/health; then echo; exit 0; fi
+        sleep 3
+      done
+      docker compose logs --no-color
+      exit 1
+  after_script:
+    - docker compose down -v || true

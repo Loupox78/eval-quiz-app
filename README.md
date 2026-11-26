@@ -18,6 +18,8 @@ La consigne d'origine du formateur est conservée plus bas, à partir de [« Con
 
 Schémas d'architecture (local, Azure, chaîne de livraison) : [docs-groupe/architecture.md](docs-groupe/architecture.md).
 
+Bonus : la même CI en version GitLab CI/CD, pour comparer les deux outils : [docs-groupe/bonus-gitlab.md](docs-groupe/bonus-gitlab.md).
+
 ## Lancer le projet en local
 
 Prérequis : Docker Desktop (ou Docker Engine + Compose v2), Git.
