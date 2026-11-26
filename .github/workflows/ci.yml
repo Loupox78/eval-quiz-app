@@ -1,0 +1,75 @@
+# CI — exécutée sur chaque Pull Request vers main.
+# Construit les deux images, les scanne avec Trivy (bloquant sur CRITICAL)
+# et vérifie que la stack Docker Compose démarre (GET /health).
+# Aucun accès Azure n'est nécessaire ici.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TRIVY_IMAGE: aquasec/trivy:0.76.2   # version épinglée (même version que les scans J2)
+
+jobs:
+  build-scan:
+    name: Build + Trivy (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: backend
+            context: ./backend
+          - service: frontend
+            context: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build de l'image
+        run: docker build --pull -t quiz-${{ matrix.service }}:ci ${{ matrix.context }}
+
+      - name: Rapport Trivy complet (HIGH + CRITICAL, informatif)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY_IMAGE" \
+            image --scanners vuln --severity HIGH,CRITICAL --format table \
+            quiz-${{ matrix.service }}:ci | tee trivy-${{ matrix.service }}.txt
+
+      - name: Contrôle bloquant Trivy (échec si CRITICAL)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY_IMAGE" \
+            image --scanners vuln --severity CRITICAL --exit-code 1 --no-progress \
+            quiz-${{ matrix.service }}:ci
+
+      - name: Archive du rapport
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-${{ matrix.service }}
+          path: trivy-${{ matrix.service }}.txt
+
+  smoke-test:
+    name: Test de démarrage (Docker Compose)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Démarrage de la stack
+        run: |
+          cp .env.example .env
+          docker compose up -d --build
+      - name: Vérification de /health
+        run: |
+          for _ in $(seq 1 30); do
+            if curl -fsS http://localhost:8087/health; then echo; exit 0; fi
+            sleep 2
+          done
+          docker compose ps
+          docker compose logs
+          exit 1
+      - name: Arrêt
+        if: always()
+        run: docker compose down -v
