@@ -50,6 +50,29 @@ deploy_infra() {
     az acr create -g "$RG" -n "$ACR_NAME" -l "$LOCATION" --sku Basic --admin-enabled false -o none
   fi
   log "ACR prêt : $(acr_server)"
+
+  if az identity show -n "$PULL_IDENTITY" -g "$RG" -o none 2>/dev/null; then
+    log "Identité managée $PULL_IDENTITY déjà présente"
+  else
+    log "Création de l'identité managée $PULL_IDENTITY"
+    az identity create -n "$PULL_IDENTITY" -g "$RG" -l "$LOCATION" -o none
+  fi
+
+  local principal acr_id
+  principal="$(az identity show -n "$PULL_IDENTITY" -g "$RG" --query principalId -o tsv)"
+  acr_id="$(az acr show -n "$ACR_NAME" --query id -o tsv)"
+  if [[ -z "$(az role assignment list --assignee "$principal" --scope "$acr_id" --role AcrPull --query '[].id' -o tsv)" ]]; then
+    log "Attribution du rôle AcrPull à $PULL_IDENTITY sur l'ACR (droit de lecture des images uniquement)"
+    # Juste après la création de l'identité, Azure AD peut mettre quelques secondes à la connaître
+    for i in 1 2 3 4 5 6; do
+      if az role assignment create --assignee-object-id "$principal" --assignee-principal-type ServicePrincipal \
+           --role AcrPull --scope "$acr_id" -o none 2>/dev/null; then break; fi
+      ((i == 6)) && die "attribution du rôle AcrPull impossible"
+      echo "  identité pas encore propagée, nouvel essai dans 10 s..."; sleep 10
+    done
+  else
+    log "Rôle AcrPull déjà attribué"
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -99,10 +122,28 @@ load_secrets() {
 
 app_exists() { az containerapp show -n "$1" -g "$RG" -o none 2>/dev/null; }
 
+# Garantit qu'une app existante tire ses images de l'ACR via l'identité managée
+ensure_registry() {
+  local app="$1" server="$2" identity_id="$3"
+  az containerapp identity assign -n "$app" -g "$RG" --user-assigned "$identity_id" -o none
+  az containerapp registry set -n "$app" -g "$RG" --server "$server" --identity "$identity_id" -o none
+}
+
 deploy_apps() {
   load_secrets
   local server; server="$(acr_server)"
   az extension add -n containerapp --upgrade -y -o none 2>/dev/null || true
+
+  # Les images au tag demandé doivent exister dans l'ACR
+  for img in "$BACKEND_IMAGE" "$FRONTEND_IMAGE"; do
+    az acr repository show-tags -n "$ACR_NAME" --repository "$img" -o tsv 2>/dev/null | grep -qx "$TAG" \
+      || die "image $img:$TAG absente de l'ACR. Lancez d'abord : ./scripts/deploy.sh images
+(ou déployez un tag existant : TAG=<tag> ./scripts/deploy.sh apps)"
+  done
+
+  local identity_id
+  identity_id="$(az identity show -n "$PULL_IDENTITY" -g "$RG" --query id -o tsv 2>/dev/null)" \
+    || die "identité $PULL_IDENTITY introuvable. Lancez d'abord : ./scripts/deploy.sh infra"
 
   # Mode WorkloadProfiles (standard) imposé explicitement : sans cette option, Azure crée
   # désormais un environnement "Express", qui interdit l'appel interne http://quiz-backend,
@@ -138,17 +179,18 @@ puis relancez ./scripts/deploy.sh apps"
 
   if app_exists "$BACKEND_APP"; then
     log "Mise à jour du backend $BACKEND_APP -> $BACKEND_IMAGE:$TAG"
+    ensure_registry "$BACKEND_APP" "$server" "$identity_id"
     az containerapp secret set -n "$BACKEND_APP" -g "$RG" --secrets "${secrets[@]}" -o none
     az containerapp update -n "$BACKEND_APP" -g "$RG" \
       --image "$server/$BACKEND_IMAGE:$TAG" --set-env-vars "${backend_env[@]}" -o none
   else
     log "Création du backend $BACKEND_APP (ingress interne, port 3007)"
-    # --registry-identity system : identité managée + rôle AcrPull, pas de mot de passe registre
+    # --user-assigned / --registry-identity : identité managée avec rôle AcrPull, pas de mot de passe registre
     # --ingress internal         : joignable uniquement depuis l'environnement (pas d'Internet)
     # --allow-insecure           : autorise HTTP en interne (le frontend appelle http://quiz-backend)
     az containerapp create -n "$BACKEND_APP" -g "$RG" --environment "$ACA_ENV" \
       --image "$server/$BACKEND_IMAGE:$TAG" \
-      --registry-server "$server" --registry-identity system \
+      --registry-server "$server" --user-assigned "$identity_id" --registry-identity "$identity_id" \
       --ingress internal --target-port 3007 --transport http --allow-insecure \
       --cpu 0.25 --memory 0.5Gi --min-replicas 0 --max-replicas 1 \
       --secrets "${secrets[@]}" --env-vars "${backend_env[@]}" -o none
@@ -156,13 +198,14 @@ puis relancez ./scripts/deploy.sh apps"
 
   if app_exists "$FRONTEND_APP"; then
     log "Mise à jour du frontend $FRONTEND_APP -> $FRONTEND_IMAGE:$TAG"
+    ensure_registry "$FRONTEND_APP" "$server" "$identity_id"
     az containerapp update -n "$FRONTEND_APP" -g "$RG" \
       --image "$server/$FRONTEND_IMAGE:$TAG" --set-env-vars "BACKEND_HOST=$BACKEND_APP" -o none
   else
     log "Création du frontend $FRONTEND_APP (ingress externe, port 8080)"
     az containerapp create -n "$FRONTEND_APP" -g "$RG" --environment "$ACA_ENV" \
       --image "$server/$FRONTEND_IMAGE:$TAG" \
-      --registry-server "$server" --registry-identity system \
+      --registry-server "$server" --user-assigned "$identity_id" --registry-identity "$identity_id" \
       --ingress external --target-port 8080 \
       --cpu 0.25 --memory 0.5Gi --min-replicas 0 --max-replicas 1 \
       --env-vars "BACKEND_HOST=$BACKEND_APP" -o none

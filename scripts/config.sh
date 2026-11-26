@@ -18,6 +18,10 @@ ACA_LOCATION="${ACA_LOCATION:-switzerlandnorth}"
 # Nom de l'ACR : unique au monde, 5 à 50 caractères, lettres minuscules et chiffres uniquement
 ACR_NAME="${ACR_NAME:-acrquizloupox78}"
 
+# Identité managée (user-assigned) utilisée par les Container Apps pour tirer les images
+# de l'ACR (rôle AcrPull) : aucun mot de passe de registre.
+PULL_IDENTITY="${PULL_IDENTITY:-id-quiz-acrpull}"
+
 # Environnement Azure Container Apps (réseau + logs partagés par les deux applications)
 ACA_ENV="${ACA_ENV:-cae-quiz-app}"
 

@@ -34,7 +34,7 @@ az acr repository show-tags -n acrquizloupox78 --repository quiz-backend -o tabl
 - **Script idempotent** : chaque ressource est testée (`az ... show`) avant création → le script peut être relancé sans erreur.
 - **`az provider register`** : un abonnement neuf n'a pas les fournisseurs `Microsoft.ContainerRegistry`, `Microsoft.App`, `Microsoft.OperationalInsights` activés.
 - **SKU Basic** : le moins cher, suffisant pour l'exercice.
-- **`--admin-enabled false`** : pas de couple identifiant/mot de passe partagé pour le registre. Docker se connecte avec `az acr login` (jeton Azure AD temporaire lié au compte connecté) ; les Container Apps tireront les images via une **identité managée** avec le rôle `AcrPull` (J4).
+- **`--admin-enabled false`** : pas de couple identifiant/mot de passe partagé pour le registre. Docker se connecte avec `az acr login` (jeton Azure AD temporaire lié au compte connecté) ; les Container Apps tirent les images via l'**identité managée user-assigned `id-quiz-acrpull`**, qui n'a que le rôle `AcrPull` (lecture) sur l'ACR — principe du moindre privilège.
 - **Tags traçables** : chaque image reçoit le **hash court du commit Git** (`git rev-parse --short HEAD`), plus `latest`. On sait exactement quel code tourne.
 - **`--platform linux/amd64`** : un Mac Apple Silicon construit par défaut des images arm64, qu'Azure ne peut pas exécuter. `docker buildx` produit une image amd64 par émulation.
 
@@ -76,3 +76,13 @@ Après suppression de l'environnement Express, recréation refusée :
 ```
 **Diagnostic** : `az containerapp env list -o table` → aucun environnement existant ; la limite vient de l'abonnement Azure for Students pour cette région.
 **Correction** : nouvelle variable `ACA_LOCATION` dans `scripts/config.sh` (défaut `switzerlandnorth`, région autorisée). L'ACR reste en `germanywestcentral` : un environnement peut tirer des images d'un registre situé dans une autre région (léger surcoût de transfert, négligeable ici).
+
+## Incident : `UNAUTHORIZED` au tirage de l'image
+
+```
+Field 'template.containers.quiz-backend.image' is invalid ... UNAUTHORIZED: authentication required
+```
+**Causes** : (1) une première création du backend avec `--registry-identity system` a échoué (`InternalServerError`) en laissant une app sans configuration de registre ; (2) le tag demandé (`git rev-parse --short HEAD`) ne correspondait plus aux images poussées, car de nouveaux commits avaient été faits entre-temps.
+**Corrections** :
+- identité **user-assigned** `id-quiz-acrpull` créée à l'étape `infra`, avec rôle `AcrPull` sur l'ACR, *avant* les apps → plus de dépendance à la création d'identité pendant `containerapp create` ; les apps existantes sont reconfigurées (`containerapp identity assign` + `containerapp registry set`) ;
+- vérification que `image:TAG` existe dans l'ACR avant le déploiement, avec message explicite.
