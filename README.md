@@ -4,6 +4,8 @@ Fork de [`franklin-tutorials/eval-quiz-app`](https://github.com/franklin-tutoria
 
 La consigne d'origine du formateur est conservée plus bas, à partir de [« Consigne du formateur »](#consigne-du-formateur).
 
+**Application en ligne : https://g09.labformation.fr** (santé : https://g09.labformation.fr/health, administration : https://g09.labformation.fr/gestion-quiz)
+
 ## Où en est chaque jalon
 
 | Jalon | Documentation | Preuves | PR |

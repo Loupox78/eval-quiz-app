@@ -1,0 +1,24 @@
+# Domaine personnalisé g09.labformation.fr — 2026-11-26T15:00Z
+
+$ az containerapp hostname add --hostname g09.labformation.fr -n quiz-frontend -g rg-quiz-app
+[{"bindingType": "Disabled", "name": "g09.labformation.fr"}]
+
+$ az containerapp hostname bind --hostname g09.labformation.fr -n quiz-frontend -g rg-quiz-app --environment cae-quiz-app --validation-method CNAME
+Creating managed certificate 'mc-cae-quiz-app-g09-labformation-8959' for g09.labformation.fr.
+[{"bindingType": "SniEnabled", "certificateId": ".../managedEnvironments/cae-quiz-app/managedCertificates/mc-cae-quiz-app-g09-labformation-8959", "name": "g09.labformation.fr"}]
+
+$ dig g09.labformation.fr CNAME / asuid.g09.labformation.fr TXT  (résolveur public)
+g09.labformation.fr CNAME -> quiz-frontend.yellowpebble-1a8ee382.switzerlandnorth.azurecontainerapps.io.
+asuid.g09.labformation.fr TXT -> BF760144AD68E1CE8ADA661C91023CB821F0D8EAB76C898E770EE9BE78554494
+
+$ curl -sv https://g09.labformation.fr/health
+* subject: CN=g09.labformation.fr
+* expire date: May 26 23:59:59 2027 GMT
+* issuer: C=US; O=DigiCert Inc; OU=www.digicert.com; CN=GeoTrust TLS RSA CA G1
+* SSL certificate verify ok.
+< HTTP/2 200 
+{"status":"ok"}
+
+
+$ curl -s -o /dev/null -w "%{http_code}" https://g09.labformation.fr/
+200

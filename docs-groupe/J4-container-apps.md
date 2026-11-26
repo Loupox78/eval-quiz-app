@@ -65,3 +65,22 @@ C'est ce qu'on utilise en J6 pour prouver que le déploiement automatique a bien
 - Le quota étudiant bloquait la création d'environnement en `germanywestcentral` : il faut lire le message d'erreur et changer de région, ce n'est pas notre script qui est faux.
 - Identité managée + `AcrPull` = pas de mot de passe de registre à stocker nulle part.
 - `min-replicas 0` = démarrage à froid de 10 à 30 s après une pause. Avant la démo, ouvrir l'URL un peu avant.
+
+## Domaine personnalisé : g09.labformation.fr
+
+Le frontend est publié sur **https://g09.labformation.fr** avec un **certificat TLS managé** par Azure (émis par DigiCert/GeoTrust, renouvelé automatiquement).
+
+1. Identifiant de vérification de l'environnement : `az containerapp show -n quiz-frontend -g rg-quiz-app --query properties.customDomainVerificationId -o tsv`
+2. Enregistrements DNS ajoutés par le formateur (zone gérée par lui) :
+   - `CNAME g09` → `quiz-frontend.<…>.switzerlandnorth.azurecontainerapps.io`
+   - `TXT asuid.g09` → identifiant de vérification (prouve que le domaine est bien rattaché à notre environnement)
+3. Liaison et certificat :
+   ```bash
+   az containerapp hostname add  --hostname g09.labformation.fr -n quiz-frontend -g rg-quiz-app
+   az containerapp hostname bind --hostname g09.labformation.fr -n quiz-frontend -g rg-quiz-app \
+     --environment cae-quiz-app --validation-method CNAME
+   ```
+   `bindingType: SniEnabled` : le certificat est attaché (SNI = le serveur choisit le certificat selon le nom demandé).
+
+Seul le frontend a un domaine : le backend reste en ingress interne, joint par Nginx via `http://quiz-backend`.
+Preuve : [`preuves/J4/domaine-g09-labformation.txt`](../preuves/J4/domaine-g09-labformation.txt).

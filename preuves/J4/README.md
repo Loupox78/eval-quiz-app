@@ -6,6 +6,7 @@
 | `revision-backend-healthy.png` | Révision active du backend, état `Healthy` |
 | `health-http-200.png` | `GET /health` via l'URL publique du frontend → `HTTP/2 200`, `{"status":"ok"}`. L'en-tête `x-powered-by: Express` montre que la réponse vient du backend, relayée par Nginx (communication interservices) |
 
-- URL frontend : https://quiz-frontend.yellowpebble-1a8ee382.switzerlandnorth.azurecontainerapps.io
+- Domaine personnalisé : https://g09.labformation.fr — certificat managé, voir `domaine-g09-labformation.txt`
+- URL frontend (Azure) : https://quiz-frontend.yellowpebble-1a8ee382.switzerlandnorth.azurecontainerapps.io
 - Région : `switzerlandnorth` — environnement `cae-quiz-app` (mode WorkloadProfiles)
 - Base de données : valeur factice à ce stade (J5 non commencé) ; `/health` ne dépend pas de PostgreSQL.
