@@ -60,22 +60,11 @@ Après fusion dans `main`, le workflow GitHub Actions `cd.yml` fait la même mis
 
 ## Usage de l'IA
 
-On a utilisé **Claude Code** (assistant IA d'Anthropic, dans le terminal et l'app desktop) tous les deux pendant le projet.
+Outil : un assistant IA de code, utilisé dans le terminal.
 
-Ce qu'on lui a fait faire :
-- expliquer des notions qu'on ne maîtrisait pas bien (multi-stage, utilisateur non-root, ingress interne / externe, OIDC, `sslmode`) ;
-- proposer des premières versions des Dockerfiles, du Compose, des scripts Azure CLI et des workflows, qu'on a ensuite adaptées ;
-- lire les rapports Trivy et trouver d'où venaient les CVE (ex. : toutes les CVE Node.js du backend venaient de npm lui-même) ;
-- aider à diagnostiquer les erreurs Azure (MFA `AADSTS50076`, environnement « Express », quota `MaxNumberOfEnvironmentsInSubExceeded`, `UNAUTHORIZED` au tirage d'image) ;
-- relire nos PR et rédiger des brouillons de documentation.
-
-Comment on a vérifié :
-- tout a été **lancé pour de vrai** : `docker compose up`, tests `curl` de `/health` et de l'inscription, `docker compose down` / `up` pour la persistance, scans Trivy avant/après, déploiements Azure, requêtes dans Neon ;
-- les PR passent par la **CI** (build, Trivy bloquant, test d'intégration) avant fusion ;
-- quand l'IA se trompait ou proposait des choses non adaptées (ex. région interdite par la policy de l'école, PR en double sur J3), on a corrigé nous-mêmes ;
-- chacun relit et sait réexpliquer les fichiers qu'il a poussés.
-
-Règle qu'on s'est fixée : ne pas donner à l'IA de mots de passe, chaînes de connexion Neon, clés API ou secrets GitHub/Azure. Les connexions (`az login` avec MFA, `gh auth login`) ont été faites par nous dans le navigateur ; l'IA n'a jamais saisi d'identifiants. Le `.env` et le `.env.azure` restent sur nos machines.
+- **Pour quoi** : explications de notions, premières versions de configurations qu'on a ensuite adaptées, aide au diagnostic des erreurs Azure et Trivy, relecture.
+- **Vérification** : tout a été testé pour de vrai (Compose, `curl`, scans Trivy avant/après, déploiements Azure, Neon) et passe par la CI avant fusion. Chacun sait réexpliquer ce qu'il a poussé.
+- **Secrets** : aucun mot de passe, chaîne de connexion ni clé n'est donné à l'IA ; les connexions (`az login`, `gh auth login`) sont faites par nous.
 
 ---
 
