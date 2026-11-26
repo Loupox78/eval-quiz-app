@@ -1,0 +1,2 @@
+# Scripts shell : toujours en LF, sinon bash échoue sous Linux (CI GitHub Actions)
+*.sh text eol=lf
