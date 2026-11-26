@@ -1,3 +1,86 @@
+# Quiz App — dépôt du groupe Loupox78 / Mems932
+
+Fork de [`franklin-tutorials/eval-quiz-app`](https://github.com/franklin-tutorials/eval-quiz-app). Notre travail : conteneuriser Quiz App, sécuriser les images, la déployer sur Azure et automatiser les livraisons. **Le code de l'application n'a pas été modifié** (sauf une question de quiz pour la démo CI/CD).
+
+La consigne d'origine du formateur est conservée plus bas, à partir de [« Consigne du formateur »](#consigne-du-formateur).
+
+## Où en est chaque jalon
+
+| Jalon | Documentation | Preuves | PR |
+|---|---|---|---|
+| J0 — Vérification Azure | [J0](docs-groupe/J0-verification-azure.md) | — | #3 |
+| J1 — Conteneurisation locale | [J1](docs-groupe/J1-conteneurisation.md) | [preuves/J1](preuves/J1/) | #1, #3 |
+| J2 — Sécurité des images (Trivy) | [J2](docs-groupe/J2-securite-trivy.md) | [preuves/J2](preuves/J2/) | #2, #5 |
+| J3 — Azure CLI + ACR | [J3](docs-groupe/J3-azure-acr.md) | [preuves/J3](preuves/J3/) | #4 |
+| J4 — Azure Container Apps | [J4](docs-groupe/J4-container-apps.md) | [preuves/J4](preuves/J4/) | #4 |
+| J5 — PostgreSQL cloud (Neon) | [J5](docs-groupe/J5-postgresql-neon.md) | [preuves/J5](preuves/J5/) | #7 |
+| J6 — CI/CD GitHub Actions | [J6](docs-groupe/J6-cicd.md) | [preuves/J6](preuves/J6/) | #9, démo d'échec #10 |
+
+Schémas d'architecture (local, Azure, chaîne de livraison) : [docs-groupe/architecture.md](docs-groupe/architecture.md).
+
+## Lancer le projet en local
+
+Prérequis : Docker Desktop (ou Docker Engine + Compose v2), Git.
+
+```bash
+git clone https://github.com/Loupox78/eval-quiz-app.git
+cd eval-quiz-app
+cp .env.example .env          # puis changer les mots de passe dans .env (jamais commité)
+docker compose up -d --build
+```
+
+- Quiz : http://localhost:8087
+- Administration : http://localhost:8087/gestion-quiz (identifiants `ADMIN_USERNAME` / `ADMIN_PASSWORD` du `.env`)
+- Santé : http://localhost:8087/health → `{"status":"ok"}`
+
+Arrêter : `docker compose down` (garde les données). Tout effacer, base comprise : `docker compose down -v`.
+
+> Attention : `POSTGRES_PASSWORD` n'est lu qu'à la **première** création du volume `pgdata`. Pour le changer ensuite, soit `ALTER USER` dans la base, soit `docker compose down -v` (perte des données).
+
+## Déployer sur Azure
+
+Prérequis : Azure CLI connecté (`az login`, MFA demandée par le tenant de l'école), Docker démarré, et un fichier `.env.azure` rempli à partir de [`.env.azure.example`](.env.azure.example) (jamais commité).
+
+```bash
+./scripts/deploy.sh all       # groupe + ACR + identité, build/push des images, Container Apps
+./scripts/deploy.sh status    # état et URL publique
+```
+
+Les paramètres non secrets (région, noms des ressources) sont dans [`scripts/config.sh`](scripts/config.sh). Les régions autorisées dépendent de l'abonnement étudiant (voir J0 et J3).
+
+Après fusion dans `main`, le workflow GitHub Actions `cd.yml` fait la même mise à jour automatiquement (voir [J6](docs-groupe/J6-cicd.md)).
+
+## Nettoyer
+
+```bash
+./scripts/destroy.sh          # supprime le groupe de ressources (ACR, Container Apps, logs) après confirmation
+```
+
+À faire seulement après avoir sauvegardé les preuves et eu l'accord du formateur. La base Neon est à supprimer à part, dans la console Neon.
+
+## Usage de l'IA
+
+On a utilisé **Claude Code** (assistant IA d'Anthropic, dans le terminal et l'app desktop) tous les deux pendant le projet.
+
+Ce qu'on lui a fait faire :
+- expliquer des notions qu'on ne maîtrisait pas bien (multi-stage, utilisateur non-root, ingress interne / externe, OIDC, `sslmode`) ;
+- proposer des premières versions des Dockerfiles, du Compose, des scripts Azure CLI et des workflows, qu'on a ensuite adaptées ;
+- lire les rapports Trivy et trouver d'où venaient les CVE (ex. : toutes les CVE Node.js du backend venaient de npm lui-même) ;
+- aider à diagnostiquer les erreurs Azure (MFA `AADSTS50076`, environnement « Express », quota `MaxNumberOfEnvironmentsInSubExceeded`, `UNAUTHORIZED` au tirage d'image) ;
+- relire nos PR et rédiger des brouillons de documentation.
+
+Comment on a vérifié :
+- tout a été **lancé pour de vrai** : `docker compose up`, tests `curl` de `/health` et de l'inscription, `docker compose down` / `up` pour la persistance, scans Trivy avant/après, déploiements Azure, requêtes dans Neon ;
+- les PR passent par la **CI** (build, Trivy bloquant, test d'intégration) avant fusion ;
+- quand l'IA se trompait ou proposait des choses non adaptées (ex. région interdite par la policy de l'école, PR en double sur J3), on a corrigé nous-mêmes ;
+- chacun relit et sait réexpliquer les fichiers qu'il a poussés.
+
+Règle qu'on s'est fixée : ne pas donner à l'IA de mots de passe, chaînes de connexion Neon, clés API ou secrets GitHub/Azure. Les connexions (`az login` avec MFA, `gh auth login`) ont été faites par nous dans le navigateur ; l'IA n'a jamais saisi d'identifiants. Le `.env` et le `.env.azure` restent sur nos machines.
+
+---
+
+# Consigne du formateur
+
 # Quiz App - Projet d'évaluation Conteneurisation
 
 ## Mission
