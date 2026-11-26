@@ -53,7 +53,7 @@ jobs:
       - name: Build des images (linux/amd64)
         run: |
           docker build --pull -t "$SERVER/$BACKEND_IMAGE:$TAG" -t "$SERVER/$BACKEND_IMAGE:latest" ./backend
-          docker build --pull -t "$SERVER/$FRONTEND_IMAGE:$TAG" -t "$SERVER/$FRONTEND_IMAGE:latest" .
+          docker build --pull --build-arg APP_VERSION="$TAG" -t "$SERVER/$FRONTEND_IMAGE:$TAG" -t "$SERVER/$FRONTEND_IMAGE:latest" .
 
       - name: Contrôle Trivy avant publication (échec si CRITICAL)
         run: |
@@ -78,7 +78,7 @@ jobs:
           FQDN=$(az containerapp show -n "$FRONTEND_APP" -g "$RG" --query properties.configuration.ingress.fqdn -o tsv)
           az containerapp list -g "$RG" --query "[].{App:name, Image:properties.template.containers[0].image, Etat:properties.runningStatus}" -o table
           for _ in $(seq 1 20); do
-            if curl -fsS "https://$FQDN/health"; then echo; echo "Déployé : https://$FQDN"; exit 0; fi
+            if curl -fsS "https://$FQDN/health"; then echo; curl -fsS "https://$FQDN/version"; echo "Déployé : https://$FQDN"; exit 0; fi
             sleep 6
           done
           echo "/health ne répond pas" >&2; exit 1
