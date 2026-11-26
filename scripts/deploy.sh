@@ -189,6 +189,11 @@ puis relancez ./scripts/deploy.sh apps"
     az containerapp secret set -n "$BACKEND_APP" -g "$RG" --secrets "${secrets[@]}" -o none
     az containerapp update -n "$BACKEND_APP" -g "$RG" \
       --image "$server/$BACKEND_IMAGE:$TAG" --set-env-vars "${backend_env[@]}" -o none
+    # Un secret modifié n'est lu qu'au démarrage du conteneur : on redémarre la révision active
+    local rev
+    rev="$(az containerapp show -n "$BACKEND_APP" -g "$RG" --query properties.latestRevisionName -o tsv)"
+    log "Redémarrage de la révision $rev pour appliquer les secrets"
+    az containerapp revision restart -n "$BACKEND_APP" -g "$RG" --revision "$rev" -o none
   else
     log "Création du backend $BACKEND_APP (ingress interne, port 3007)"
     # --user-assigned / --registry-identity : identité managée avec rôle AcrPull, pas de mot de passe registre
