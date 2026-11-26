@@ -1,0 +1,8 @@
+# Vérification de persistance après redémarrage du backend (26/11/2026)
+# 1) az containerapp revision restart -n quiz-backend ... -> "Restart succeeded" (capture 3)
+# 2) Connexion admin puis lecture des résultats via l'URL publique :
+#    POST /api/admin/login  -> 200 (jeton JWT, non reproduit)
+#    GET  /api/admin/results (Authorization: Bearer <jeton>)
+date du test : 2026-11-26T13:27:55Z
+{'email': 'aezaze@gmail.com', 'firstname': 'aze', 'attempts': '1', 'best_score': 4, 'avg_score': '4.0', 'last_attempt': '2026-11-26T12:51:10.953Z'}
+# -> le résultat enregistré à 12:51 UTC est toujours présent après le redémarrage : il est stocké dans Neon, pas dans le conteneur.
