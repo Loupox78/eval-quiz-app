@@ -1,0 +1,121 @@
+# J6-B — Déploiement continu après fusion dans main
+#
+# Déclenché quand du code arrive sur main (donc seulement après une PR validée par ci.yml
+# et approuvée). Une PR ne déclenche JAMAIS ce workflow.
+#   1. Connexion à Azure par OIDC : pas de mot de passe stocké dans GitHub
+#   2. Build des 2 images, tag = hash court du commit
+#   3. Re-scan Trivy (CRITICAL bloquant) : on ne publie jamais une image non contrôlée
+#   4. Push dans l'ACR
+#   5. az containerapp update : nouvelle révision du backend et du frontend
+#   6. Vérification de /health sur l'URL publique
+#
+# Prérequis (une seule fois, par l'admin du dépôt) : ./scripts/setup-github-oidc.sh
+# qui crée l'identité Azure et les secrets AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_SUBSCRIPTION_ID.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    # Une fusion qui ne touche que de la doc ou des preuves ne redéploie pas
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "docs-groupe/**"
+      - "preuves/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # nécessaire pour obtenir le jeton OIDC de GitHub
+
+# Jamais deux déploiements en même temps ; on n'annule pas celui en cours
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  TRIVY_VERSION: "0.76.2"
+
+jobs:
+  deploy:
+    name: Build, push ACR et mise à jour Container Apps
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Lire la configuration (scripts/config.sh)
+        run: |
+          source scripts/config.sh
+          {
+            echo "RG=$RG"
+            echo "ACR_NAME=$ACR_NAME"
+            echo "BACKEND_APP=$BACKEND_APP"
+            echo "FRONTEND_APP=$FRONTEND_APP"
+            echo "BACKEND_IMAGE=$BACKEND_IMAGE"
+            echo "FRONTEND_IMAGE=$FRONTEND_IMAGE"
+            echo "TAG=$(git rev-parse --short HEAD)"
+          } >> "$GITHUB_ENV"
+
+      - name: Connexion à Azure (OIDC, identité id-quiz-github)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Connexion de Docker à l'ACR
+        run: |
+          az acr login -n "$ACR_NAME"
+          echo "ACR_SERVER=$(az acr show -n "$ACR_NAME" --query loginServer -o tsv)" >> "$GITHUB_ENV"
+
+      - name: Construire les images (linux/amd64)
+        run: |
+          docker build --pull -t "$ACR_SERVER/$BACKEND_IMAGE:$TAG" ./backend
+          docker build --pull -t "$ACR_SERVER/$FRONTEND_IMAGE:$TAG" .
+
+      - name: Contrôle Trivy avant publication (CRITICAL bloquant)
+        run: |
+          for img in "$BACKEND_IMAGE" "$FRONTEND_IMAGE"; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+              "aquasec/trivy:${TRIVY_VERSION}" image \
+              --scanners vuln --severity CRITICAL --exit-code 1 \
+              "$ACR_SERVER/$img:$TAG"
+          done
+
+      - name: Publier les images dans l'ACR
+        run: |
+          docker push "$ACR_SERVER/$BACKEND_IMAGE:$TAG"
+          docker push "$ACR_SERVER/$FRONTEND_IMAGE:$TAG"
+          docker image inspect --format '{{index .RepoDigests 0}}' \
+            "$ACR_SERVER/$BACKEND_IMAGE:$TAG" "$ACR_SERVER/$FRONTEND_IMAGE:$TAG"
+
+      - name: Mettre à jour les Container Apps (nouvelles révisions)
+        run: |
+          az extension add -n containerapp --upgrade -y -o none
+          # Seule l'image change : secrets, variables et ingress restent ceux posés par deploy.sh
+          az containerapp update -n "$BACKEND_APP" -g "$RG" \
+            --image "$ACR_SERVER/$BACKEND_IMAGE:$TAG" \
+            --revision-suffix "gh-$TAG-$GITHUB_RUN_NUMBER" -o none
+          az containerapp update -n "$FRONTEND_APP" -g "$RG" \
+            --image "$ACR_SERVER/$FRONTEND_IMAGE:$TAG" \
+            --revision-suffix "gh-$TAG-$GITHUB_RUN_NUMBER" -o none
+
+      - name: Vérifier le déploiement
+        run: |
+          for app in "$BACKEND_APP" "$FRONTEND_APP"; do
+            echo "== Révisions de $app"
+            az containerapp revision list -n "$app" -g "$RG" \
+              --query "[].{revision:name, active:properties.active, image:properties.template.containers[0].image, sante:properties.healthState, creee:properties.createdTime}" \
+              -o table
+          done
+          FQDN="$(az containerapp show -n "$FRONTEND_APP" -g "$RG" --query properties.configuration.ingress.fqdn -o tsv)"
+          echo "Application : https://$FQDN"
+          # min-replicas 0 : le premier appel peut prendre 10 à 30 s (démarrage à froid)
+          curl --fail --silent --show-error --retry 12 --retry-delay 10 --retry-all-errors \
+            "https://$FQDN/health"
+          echo
+          echo "### Déploiement $TAG" >> "$GITHUB_STEP_SUMMARY"
+          echo "- URL : https://$FQDN" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Images : \`$BACKEND_IMAGE:$TAG\`, \`$FRONTEND_IMAGE:$TAG\`" >> "$GITHUB_STEP_SUMMARY"
