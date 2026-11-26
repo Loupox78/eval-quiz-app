@@ -1,5 +1,7 @@
 # J1 — Conteneurisation locale
 
+> **Mise à jour J2 :** les images ont ensuite été durcies (Node 24, Nginx non-root sur le port **8080** du conteneur, Compose `8087:8080`). Voir [J2-securite-trivy.md](J2-securite-trivy.md). Ce document décrit l'état validé en J1.
+
 ## 1. Analyse préalable de l'application
 
 | Composant  | Rôle | Port | Exposé sur l'hôte ? |

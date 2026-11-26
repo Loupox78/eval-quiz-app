@@ -4,7 +4,7 @@ Report Summary
 ┌─────────────────────────────────────┬────────┬─────────────────┐
 │               Target                │  Type  │ Vulnerabilities │
 ├─────────────────────────────────────┼────────┼─────────────────┤
-│ quiz-frontend:local (alpine 3.24.4) │ alpine │        0        │
+│ quiz-frontend:local (alpine 3.24.2) │ alpine │        0        │
 └─────────────────────────────────────┴────────┴─────────────────┘
 Legend:
 - '-': Not scanned
