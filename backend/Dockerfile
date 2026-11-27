@@ -1,5 +1,5 @@
 # Étape 1 : installation des dépendances de production (npm n'est utile qu'ici)
-FROM node:24-alpine AS deps
+FROM node:14-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
